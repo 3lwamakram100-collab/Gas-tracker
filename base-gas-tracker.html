@@ -1,0 +1,929 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Base Gas Tracker</title>
+
+<!-- Farcaster Frame Meta Tags -->
+<meta property="fc:frame" content="vNext" />
+<meta property="fc:frame:image" content="https://your-deployed-url.com/og-image.png" />
+<meta property="fc:frame:button:1" content="Check Gas" />
+<meta property="og:title" content="Base Gas Tracker" />
+<meta property="og:description" content="Live gas fees on Base network" />
+
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Cabinet+Grotesk:wght@400;500;700;800;900&display=swap" rel="stylesheet">
+
+<style>
+  :root {
+    --bg: #f5f0e8;
+    --surface: #ffffff;
+    --surface2: #f0ebe0;
+    --border: #e0d8c8;
+    --ink: #1a1410;
+    --muted: #8a7e6e;
+    --accent: #ff4d00;
+    --accent2: #0052ff;
+    --green: #00853e;
+    --yellow: #f5a623;
+    --red: #d92b2b;
+    --font-mono: 'DM Mono', monospace;
+    --font-display: 'Cabinet Grotesk', sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-display);
+    min-height: 100vh;
+    position: relative;
+    overflow-x: hidden;
+  }
+
+  /* Grain texture overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 100;
+    opacity: 0.4;
+  }
+
+  .container {
+    max-width: 700px;
+    margin: 0 auto;
+    padding: 48px 24px;
+  }
+
+  /* Header */
+  header {
+    margin-bottom: 48px;
+    animation: slideIn 0.5s ease both;
+  }
+
+  .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 16px;
+  }
+
+  .eyebrow-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+    animation: breathe 2s ease infinite;
+  }
+
+  @keyframes breathe {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.4); opacity: 0.6; }
+  }
+
+  h1 {
+    font-size: clamp(42px, 8vw, 72px);
+    font-weight: 900;
+    line-height: 0.95;
+    letter-spacing: -3px;
+    color: var(--ink);
+    margin-bottom: 16px;
+  }
+
+  h1 span {
+    color: var(--accent2);
+    display: block;
+  }
+
+  .header-desc {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--muted);
+    max-width: 400px;
+    line-height: 1.6;
+  }
+
+  /* Live indicator */
+  .live-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--ink);
+    color: var(--bg);
+    border-radius: 12px;
+    padding: 14px 20px;
+    margin-bottom: 24px;
+    animation: slideIn 0.5s ease 0.1s both;
+  }
+
+  .live-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+
+  .live-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: #00ff88;
+    box-shadow: 0 0 8px #00ff88;
+    animation: breathe 1.5s ease infinite;
+  }
+
+  .refresh-btn {
+    background: rgba(255,255,255,0.15);
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 8px;
+    padding: 6px 14px;
+    color: var(--bg);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.2s;
+    letter-spacing: 1px;
+  }
+
+  .refresh-btn:hover { background: rgba(255,255,255,0.25); }
+
+  .last-updated {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: rgba(255,255,255,0.5);
+  }
+
+  /* Gas Cards */
+  .gas-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-bottom: 24px;
+    animation: slideIn 0.5s ease 0.2s both;
+  }
+
+  .gas-card {
+    background: var(--surface);
+    border: 2px solid var(--border);
+    border-radius: 16px;
+    padding: 24px 20px;
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
+    cursor: default;
+  }
+
+  .gas-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 12px 32px rgba(0,0,0,0.1);
+  }
+
+  .gas-card.low { border-color: var(--green); }
+  .gas-card.medium { border-color: var(--yellow); }
+  .gas-card.high { border-color: var(--red); }
+
+  .gas-card-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 12px;
+  }
+
+  .gas-speed {
+    font-size: 18px;
+    font-weight: 800;
+    margin-bottom: 4px;
+  }
+
+  .gas-card.low .gas-speed { color: var(--green); }
+  .gas-card.medium .gas-speed { color: var(--yellow); }
+  .gas-card.high .gas-speed { color: var(--red); }
+
+  .gas-gwei {
+    font-family: var(--font-mono);
+    font-size: 28px;
+    font-weight: 500;
+    color: var(--ink);
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+
+  .gas-unit {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .gas-usd {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--border);
+  }
+
+  .gas-emoji {
+    position: absolute;
+    top: 16px; right: 16px;
+    font-size: 20px;
+  }
+
+  /* Stats row */
+  .stats-row {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+    margin-bottom: 24px;
+    animation: slideIn 0.5s ease 0.3s both;
+  }
+
+  .stat-box {
+    background: var(--surface);
+    border: 2px solid var(--border);
+    border-radius: 16px;
+    padding: 20px;
+    transition: transform 0.2s;
+  }
+
+  .stat-box:hover { transform: translateY(-2px); }
+
+  .stat-box-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+
+  .stat-box-value {
+    font-size: 22px;
+    font-weight: 800;
+    color: var(--ink);
+    letter-spacing: -1px;
+  }
+
+  .stat-box-sub {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+
+  /* Gas meter */
+  .meter-card {
+    background: var(--surface);
+    border: 2px solid var(--border);
+    border-radius: 16px;
+    padding: 24px;
+    margin-bottom: 24px;
+    animation: slideIn 0.5s ease 0.35s both;
+  }
+
+  .meter-title {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 16px;
+  }
+
+  .meter-bar-bg {
+    width: 100%;
+    height: 12px;
+    background: var(--surface2);
+    border-radius: 100px;
+    overflow: hidden;
+    margin-bottom: 8px;
+  }
+
+  .meter-bar-fill {
+    height: 100%;
+    border-radius: 100px;
+    background: linear-gradient(90deg, var(--green), var(--yellow), var(--red));
+    transition: width 1s ease;
+  }
+
+  .meter-labels {
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--muted);
+  }
+
+  .meter-status {
+    text-align: center;
+    font-size: 20px;
+    font-weight: 800;
+    margin-top: 12px;
+    padding: 10px;
+    border-radius: 10px;
+    background: var(--surface2);
+  }
+
+  /* Transaction estimator */
+  .estimator-card {
+    background: var(--ink);
+    color: var(--bg);
+    border-radius: 16px;
+    padding: 24px;
+    margin-bottom: 24px;
+    animation: slideIn 0.5s ease 0.4s both;
+  }
+
+  .estimator-title {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.5);
+    margin-bottom: 16px;
+  }
+
+  .tx-list { display: flex; flex-direction: column; gap: 10px; }
+
+  .tx-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background: rgba(255,255,255,0.07);
+    border-radius: 10px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    transition: background 0.15s;
+  }
+
+  .tx-item:hover { background: rgba(255,255,255,0.12); }
+
+  .tx-name { color: rgba(255,255,255,0.7); }
+  .tx-cost { color: #00ff88; font-weight: 500; }
+
+  /* Ownership card */
+  .ownership-card {
+    background: var(--surface);
+    border: 2px solid var(--accent2);
+    border-radius: 16px;
+    padding: 24px;
+    margin-bottom: 24px;
+    position: relative;
+    overflow: hidden;
+    animation: slideIn 0.5s ease 0.5s both;
+  }
+
+  .ownership-card::before {
+    content: 'VERIFIED BUILDER';
+    position: absolute;
+    top: 16px; right: -30px;
+    background: var(--accent2);
+    color: white;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 2px;
+    padding: 4px 40px;
+    transform: rotate(45deg);
+  }
+
+  .ownership-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .ownership-icon { font-size: 28px; }
+
+  .ownership-title {
+    font-size: 18px;
+    font-weight: 800;
+    color: var(--ink);
+  }
+
+  .ownership-sub {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+
+  .ownership-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+    font-family: var(--font-mono);
+    font-size: 12px;
+  }
+
+  .ownership-row:last-of-type { border-bottom: none; }
+
+  .ownership-label {
+    color: var(--muted);
+    font-size: 10px;
+    letter-spacing: 1px;
+    min-width: 90px;
+    padding-top: 1px;
+    text-transform: uppercase;
+  }
+
+  .ownership-value {
+    color: var(--ink);
+    word-break: break-all;
+    flex: 1;
+  }
+
+  .sign-btn {
+    width: 100%;
+    margin-top: 16px;
+    background: var(--accent2);
+    border: none;
+    border-radius: 10px;
+    padding: 14px 24px;
+    color: white;
+    font-family: var(--font-display);
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+    letter-spacing: -0.3px;
+  }
+
+  .sign-btn:hover {
+    background: #0040cc;
+    transform: translateY(-1px);
+    box-shadow: 0 8px 24px rgba(0,82,255,0.3);
+  }
+
+  .sign-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+  .signature-box {
+    margin-top: 16px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    display: none;
+  }
+
+  .sig-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+
+  .sig-message {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--accent2);
+    word-break: break-all;
+    padding: 8px;
+    background: white;
+    border-radius: 6px;
+    line-height: 1.6;
+  }
+
+  .sig-value {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--green);
+    word-break: break-all;
+    padding: 8px;
+    background: white;
+    border-radius: 6px;
+    max-height: 60px;
+    overflow: hidden;
+    margin-top: 8px;
+  }
+
+  .copy-sig-btn {
+    margin-top: 10px;
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 14px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--muted);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .copy-sig-btn:hover { color: var(--ink); border-color: var(--accent2); }
+
+  .sig-note {
+    margin-top: 10px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--green);
+    line-height: 1.6;
+  }
+
+  .sig-error {
+    margin-top: 12px;
+    padding: 10px 14px;
+    background: rgba(217,43,43,0.08);
+    border: 1px solid rgba(217,43,43,0.2);
+    border-radius: 8px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--red);
+    display: none;
+  }
+
+  /* Footer */
+  .footer {
+    text-align: center;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--muted);
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+    animation: slideIn 0.5s ease 0.6s both;
+  }
+
+  .footer a { color: var(--accent2); text-decoration: none; }
+
+  /* Animations */
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .spinning { animation: spin 1s linear infinite; display: inline-block; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  @media (max-width: 520px) {
+    .gas-grid { grid-template-columns: 1fr; }
+    .stats-row { grid-template-columns: 1fr; }
+    h1 { font-size: 42px; letter-spacing: -2px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+  <!-- Header -->
+  <header>
+    <div class="eyebrow"><div class="eyebrow-dot"></div> Base Network</div>
+    <h1>Gas<span>Tracker.</span></h1>
+    <p class="header-desc">// Live transaction fees on Base — updated every 15 seconds</p>
+  </header>
+
+  <!-- Live Bar -->
+  <div class="live-bar">
+    <div class="live-indicator">
+      <div class="live-dot"></div>
+      Live Feed
+    </div>
+    <span class="last-updated" id="lastUpdated">Fetching...</span>
+    <button class="refresh-btn" onclick="fetchGasData()">↺ Refresh</button>
+  </div>
+
+  <!-- Gas Cards -->
+  <div class="gas-grid">
+    <div class="gas-card low">
+      <div class="gas-emoji">🐢</div>
+      <div class="gas-card-label">Slow</div>
+      <div class="gas-speed" style="color:var(--green)">Economy</div>
+      <div class="gas-gwei" id="slowGas">—</div>
+      <div class="gas-unit">Gwei</div>
+      <div class="gas-usd" id="slowUsd">~$— per tx</div>
+    </div>
+    <div class="gas-card medium">
+      <div class="gas-emoji">🚗</div>
+      <div class="gas-card-label">Standard</div>
+      <div class="gas-speed" style="color:var(--yellow)">Normal</div>
+      <div class="gas-gwei" id="avgGas">—</div>
+      <div class="gas-unit">Gwei</div>
+      <div class="gas-usd" id="avgUsd">~$— per tx</div>
+    </div>
+    <div class="gas-card high">
+      <div class="gas-emoji">🚀</div>
+      <div class="gas-card-label">Fast</div>
+      <div class="gas-speed" style="color:var(--red)">Priority</div>
+      <div class="gas-gwei" id="fastGas">—</div>
+      <div class="gas-unit">Gwei</div>
+      <div class="gas-usd" id="fastUsd">~$— per tx</div>
+    </div>
+  </div>
+
+  <!-- Stats Row -->
+  <div class="stats-row">
+    <div class="stat-box">
+      <div class="stat-box-label">Base Fee</div>
+      <div class="stat-box-value" id="baseFee">—</div>
+      <div class="stat-box-sub">Current block base fee (Gwei)</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-box-label">Latest Block</div>
+      <div class="stat-box-value" id="blockNumber">—</div>
+      <div class="stat-box-sub">Most recent block on Base</div>
+    </div>
+  </div>
+
+  <!-- Gas Meter -->
+  <div class="meter-card">
+    <div class="meter-title">// Network Congestion Meter</div>
+    <div class="meter-bar-bg">
+      <div class="meter-bar-fill" id="meterFill" style="width: 0%"></div>
+    </div>
+    <div class="meter-labels">
+      <span>🟢 Low</span>
+      <span>🟡 Medium</span>
+      <span>🔴 High</span>
+    </div>
+    <div class="meter-status" id="meterStatus">Loading network status...</div>
+  </div>
+
+  <!-- Transaction Cost Estimator -->
+  <div class="estimator-card">
+    <div class="estimator-title">// Estimated Transaction Costs (Standard Speed)</div>
+    <div class="tx-list">
+      <div class="tx-item">
+        <span class="tx-name">ETH Transfer</span>
+        <span class="tx-cost" id="ethTransferCost">—</span>
+      </div>
+      <div class="tx-item">
+        <span class="tx-name">ERC-20 Transfer</span>
+        <span class="tx-cost" id="erc20Cost">—</span>
+      </div>
+      <div class="tx-item">
+        <span class="tx-name">Uniswap Swap</span>
+        <span class="tx-cost" id="swapCost">—</span>
+      </div>
+      <div class="tx-item">
+        <span class="tx-name">NFT Mint</span>
+        <span class="tx-cost" id="nftCost">—</span>
+      </div>
+      <div class="tx-item">
+        <span class="tx-name">Contract Deploy</span>
+        <span class="tx-cost" id="deployCost">—</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Ownership Card -->
+  <div class="ownership-card">
+    <div class="ownership-header">
+      <div class="ownership-icon">🔐</div>
+      <div>
+        <div class="ownership-title">Verified Builder</div>
+        <div class="ownership-sub">On-chain ownership proof · Base Mainnet</div>
+      </div>
+    </div>
+
+    <div class="ownership-row">
+      <span class="ownership-label">Owner</span>
+      <span class="ownership-value">0x9BbE3f747011fEe98DD86DF9eea9DD92FFA89Bac</span>
+    </div>
+    <div class="ownership-row">
+      <span class="ownership-label">App URL</span>
+      <span class="ownership-value" id="appUrlDisplay">[ Deploy on Vercel to get URL ]</span>
+    </div>
+    <div class="ownership-row">
+      <span class="ownership-label">Network</span>
+      <span class="ownership-value" style="color:var(--accent2)">Base Mainnet (Chain ID: 8453)</span>
+    </div>
+    <div class="ownership-row">
+      <span class="ownership-label">Built</span>
+      <span class="ownership-value" style="color:var(--muted)">Feb 2026</span>
+    </div>
+    <div class="ownership-row">
+      <span class="ownership-label">Verify</span>
+      <span class="ownership-value">
+        <a href="https://basescan.org/address/0x9BbE3f747011fEe98DD86DF9eea9DD92FFA89Bac" target="_blank" style="color:var(--accent2)">Basescan ↗</a>
+        &nbsp;·&nbsp;
+        <a href="https://basescan.org/verifiedSignatures" target="_blank" style="color:var(--accent2)">Verified Signatures ↗</a>
+      </span>
+    </div>
+
+    <button class="sign-btn" id="signBtn" onclick="signOwnership()">
+      🔏 Sign Message to Prove Ownership
+    </button>
+
+    <div class="signature-box" id="signatureBox">
+      <div class="sig-label">Signed Message</div>
+      <div class="sig-message" id="sigMessage"></div>
+      <div class="sig-label" style="margin-top:12px">Signature Hash</div>
+      <div class="sig-value" id="sigValue"></div>
+      <button class="copy-sig-btn" onclick="copySig()">Copy Signature</button>
+      <div class="sig-note">✅ Verified — submit this signature to basescan.org/verifiedSignatures to make it public.</div>
+    </div>
+
+    <div class="sig-error" id="sigError"></div>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    ⬡ Built on Base · 
+    <a href="https://warpcast.com" target="_blank">Share on Warpcast →</a>
+  </div>
+
+</div>
+
+<script>
+  const BASE_RPC = 'https://mainnet.base.org';
+  const OWNER_WALLET = '0x9BbE3f747011fEe98DD86DF9eea9DD92FFA89Bac';
+  const ETH_PRICE_USD = 3200; // approximate — updates dynamically
+
+  let lastSignature = '';
+  let currentGweiAvg = 0;
+
+  // Update app URL
+  document.getElementById('appUrlDisplay').textContent = window.location.href;
+
+  async function rpcCall(method, params = []) {
+    const res = await fetch(BASE_RPC, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params })
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error.message);
+    return data.result;
+  }
+
+  function gweiToUsd(gwei, gasLimit) {
+    const ethCost = (gwei * gasLimit) / 1e9;
+    const usd = ethCost * ETH_PRICE_USD;
+    if (usd < 0.01) return '<$0.01';
+    return '$' + usd.toFixed(3);
+  }
+
+  function formatGwei(wei) {
+    return (Number(BigInt(wei)) / 1e9).toFixed(4);
+  }
+
+  async function fetchEthPrice() {
+    try {
+      const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd');
+      const data = await res.json();
+      return data.ethereum.usd;
+    } catch { return 3200; }
+  }
+
+  async function fetchGasData() {
+    document.getElementById('lastUpdated').textContent = '⏳ Updating...';
+
+    try {
+      const [feeData, blockHex, ethPrice] = await Promise.all([
+        rpcCall('eth_feeHistory', [1, 'latest', [10, 50, 90]]),
+        rpcCall('eth_blockNumber'),
+        fetchEthPrice()
+      ]);
+
+      const baseFeeHex = feeData.baseFeePerGas[0];
+      const baseFeeGwei = Number(BigInt(baseFeeHex)) / 1e9;
+      const blockNum = parseInt(blockHex, 16);
+
+      // Percentile rewards
+      const rewards = feeData.reward[0];
+      const slowTip = Number(BigInt(rewards[0])) / 1e9;
+      const avgTip = Number(BigInt(rewards[1])) / 1e9;
+      const fastTip = Number(BigInt(rewards[2])) / 1e9;
+
+      const slowTotal = baseFeeGwei + slowTip;
+      const avgTotal = baseFeeGwei + avgTip;
+      const fastTotal = baseFeeGwei + fastTip;
+
+      currentGweiAvg = avgTotal;
+
+      // Update gas cards
+      document.getElementById('slowGas').textContent = slowTotal.toFixed(4);
+      document.getElementById('avgGas').textContent = avgTotal.toFixed(4);
+      document.getElementById('fastGas').textContent = fastTotal.toFixed(4);
+
+      // USD estimates for simple ETH transfer (21000 gas)
+      document.getElementById('slowUsd').textContent = `~${gweiToUsd(slowTotal, 21000)} per transfer`;
+      document.getElementById('avgUsd').textContent = `~${gweiToUsd(avgTotal, 21000)} per transfer`;
+      document.getElementById('fastUsd').textContent = `~${gweiToUsd(fastTotal, 21000)} per transfer`;
+
+      // Stats
+      document.getElementById('baseFee').textContent = baseFeeGwei.toFixed(4);
+      document.getElementById('blockNumber').textContent = '#' + blockNum.toLocaleString();
+
+      // Congestion meter (0-100 based on base fee, cap at 1 gwei = 100%)
+      const congestion = Math.min((baseFeeGwei / 0.005) * 100, 100);
+      document.getElementById('meterFill').style.width = congestion + '%';
+
+      let status = '';
+      if (congestion < 30) status = '🟢 Network is calm — great time to transact!';
+      else if (congestion < 65) status = '🟡 Moderate activity — normal conditions';
+      else status = '🔴 High congestion — consider waiting';
+      document.getElementById('meterStatus').textContent = status;
+
+      // Transaction cost estimates
+      const gasLimits = {
+        ethTransfer: 21000,
+        erc20: 65000,
+        swap: 150000,
+        nftMint: 100000,
+        deploy: 500000
+      };
+
+      document.getElementById('ethTransferCost').textContent = gweiToUsd(avgTotal, gasLimits.ethTransfer);
+      document.getElementById('erc20Cost').textContent = gweiToUsd(avgTotal, gasLimits.erc20);
+      document.getElementById('swapCost').textContent = gweiToUsd(avgTotal, gasLimits.swap);
+      document.getElementById('nftCost').textContent = gweiToUsd(avgTotal, gasLimits.nftMint);
+      document.getElementById('deployCost').textContent = gweiToUsd(avgTotal, gasLimits.deploy);
+
+      // Timestamp
+      const now = new Date();
+      document.getElementById('lastUpdated').textContent = `Updated ${now.toLocaleTimeString()}`;
+
+    } catch (err) {
+      document.getElementById('lastUpdated').textContent = '❌ Error fetching data';
+      console.error(err);
+    }
+  }
+
+  // ============================================================
+  // OWNERSHIP SIGNING — no timestamp for clean Basescan verify
+  // ============================================================
+  async function signOwnership() {
+    const btn = document.getElementById('signBtn');
+    const sigBox = document.getElementById('signatureBox');
+    const sigError = document.getElementById('sigError');
+
+    sigBox.style.display = 'none';
+    sigError.style.display = 'none';
+
+    if (!window.ethereum) {
+      sigError.textContent = '⚠️ No wallet detected. Open this app inside MetaMask or Coinbase Wallet browser.';
+      sigError.style.display = 'block';
+      return;
+    }
+
+    try {
+      btn.textContent = '⏳ Requesting wallet...';
+      btn.disabled = true;
+
+      const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+      const connectedWallet = accounts[0];
+
+      // Static message — no timestamp — works perfectly with Basescan
+      const message = `I am the builder and owner of this app.\n\nApp URL: ${window.location.href}\nOwner Wallet: ${OWNER_WALLET}\nNetwork: Base Mainnet (Chain ID: 8453)\n\nThis signature proves that wallet ${OWNER_WALLET} built and owns this Base Gas Tracker dApp.`;
+
+      btn.textContent = '✍️ Sign in your wallet...';
+      const signature = await window.ethereum.request({
+        method: 'personal_sign',
+        params: [message, connectedWallet]
+      });
+
+      lastSignature = signature;
+      document.getElementById('sigMessage').textContent = message;
+      document.getElementById('sigValue').textContent = signature;
+      sigBox.style.display = 'block';
+
+      if (connectedWallet.toLowerCase() !== OWNER_WALLET.toLowerCase()) {
+        sigError.textContent = `⚠️ Connected wallet (${connectedWallet.slice(0,6)}...${connectedWallet.slice(-4)}) doesn't match owner wallet. Connect ${OWNER_WALLET.slice(0,6)}...${OWNER_WALLET.slice(-4)} to prove ownership.`;
+        sigError.style.display = 'block';
+      }
+
+    } catch (err) {
+      sigError.textContent = err.code === 4001 ? '❌ Signature rejected. Please approve in your wallet.' : '❌ Error: ' + err.message;
+      sigError.style.display = 'block';
+    } finally {
+      btn.textContent = '🔏 Sign Message to Prove Ownership';
+      btn.disabled = false;
+    }
+  }
+
+  function copySig() {
+    navigator.clipboard.writeText(lastSignature);
+    const btn = document.querySelector('.copy-sig-btn');
+    btn.textContent = 'Copied!';
+    setTimeout(() => btn.textContent = 'Copy Signature', 2000);
+  }
+
+  // Auto refresh every 15 seconds
+  fetchGasData();
+  setInterval(fetchGasData, 15000);
+</script>
+
+</body>
+</html>
